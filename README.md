@@ -10,7 +10,8 @@ Automatically simulate mouse clicks using pyautogui.
 # How to use it
 Run the script with Python.  
 Click "Programm hinzufügen" to add apps (e.g. Discord, Spotify, etc.).  
-Select a program and click "Klickposition(en) hinzufügen" — you have 5 seconds to move your mouse where it should click.  
+Select a program and click "Klickposition(en) hinzufügen" 
+— you have 5 seconds to move your mouse where it should click.  
 Set a delay between program launches (in seconds).  
 Click "Alle Programme starten" to run them all one after another, with your saved clicks.  
 
