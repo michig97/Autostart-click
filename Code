@@ -1,0 +1,172 @@
+import tkinter as tk
+from tkinter import filedialog, messagebox
+import subprocess
+import time
+import json
+from pathlib import Path
+import os
+
+try:
+    import pyautogui
+except ImportError:
+    pyautogui = None
+
+def get_programs_file():
+    folder = Path(os.path.expanduser("~")) / "GutenMorgenLauncher"
+    folder.mkdir(parents=True, exist_ok=True)
+    return folder / "programs.json"
+
+class AppLauncherUI:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Guten Morgen Launcher")
+        self.root.configure(bg="#8F8F8F")
+        self.programs = []
+
+        frame = tk.Frame(root, padx=20, pady=20, bg="#8F8F8F")
+        frame.pack()
+
+        font_label = ("Arial", 12, "bold")
+
+        self.label = tk.Label(frame, text="Programme verwalten:", font=font_label, bg="#8F8F8F")
+        self.label.grid(row=0, column=0, columnspan=4, pady=(0, 15), sticky="w")
+
+        button_style = {
+            "width": 25,
+            "bg": "#007acc",
+            "fg": "white",
+            "activebackground": "#005f99",
+            "font": ("Arial", 10, "bold"),
+            "relief": "raised",
+            "bd": 2,
+        }
+
+        self.select_button = tk.Button(frame, text="Programm hinzufügen", command=self.add_program, **button_style)
+        self.select_button.grid(row=1, column=0, padx=5, pady=5)
+
+        self.remove_button = tk.Button(frame, text="Ausgewähltes entfernen", command=self.remove_selected, **button_style)
+        self.remove_button.grid(row=1, column=1, padx=5, pady=5)
+
+        self.click_button = tk.Button(frame, text="Klickposition(en) hinzufügen", command=self.add_click_to_selected, **button_style)
+        self.click_button.grid(row=1, column=2, padx=5, pady=5)
+
+        self.save_button = tk.Button(frame, text="Speichern", command=self.save_programs, **button_style)
+        self.save_button.grid(row=1, column=3, padx=5, pady=5)
+
+        self.delay_label = tk.Label(frame, text="Verzögerung (Sekunden):", font=font_label, bg="#8F8F8F")
+        self.delay_label.grid(row=2, column=0, sticky="e", pady=(10, 0), padx=(0, 5))
+
+        self.delay_entry = tk.Entry(frame, width=5, font=("Arial", 10))
+        self.delay_entry.insert(0, "1")
+        self.delay_entry.grid(row=2, column=1, sticky="w", pady=(10, 0))
+
+        self.start_button = tk.Button(frame, text="Alle Programme starten", command=self.start_all_programs, **button_style)
+        self.start_button.grid(row=2, column=2, columnspan=2, padx=5, pady=(10, 0))
+
+        list_frame = tk.Frame(frame, bg="#8F8F8F")
+        list_frame.grid(row=3, column=0, columnspan=4, pady=15, sticky="nsew")
+
+        self.listbox = tk.Listbox(list_frame, width=100, height=12, font=("Arial", 10))
+        self.listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        self.scrollbar = tk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.listbox.yview)
+        self.scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        self.listbox.config(yscrollcommand=self.scrollbar.set)
+
+        self.quit_button = tk.Button(frame, text="Beenden", command=root.quit, **button_style)
+        self.quit_button.grid(row=4, column=1, columnspan=2, pady=10)
+
+        for i in range(4):
+            frame.grid_columnconfigure(i, weight=1)
+
+        self.load_programs()
+
+    def add_program(self):
+        filepath = filedialog.askopenfilename(title="Programm auswählen", filetypes=[("Alle Dateien", "*.*")])
+        if filepath:
+            if not any(p["path"] == filepath for p in self.programs):
+                self.programs.append({"path": filepath, "clicks": []})
+                self.listbox.insert(tk.END, filepath)
+            else:
+                messagebox.showinfo("Hinweis", "Programm ist schon in der Liste.")
+
+    def remove_selected(self):
+        selected_idx = self.listbox.curselection()
+        if not selected_idx:
+            messagebox.showinfo("Hinweis", "Bitte ein Programm auswählen.")
+            return
+        for index in reversed(selected_idx):
+            self.listbox.delete(index)
+            del self.programs[index]
+
+    def add_click_to_selected(self):
+        if pyautogui is None:
+            messagebox.showerror("Fehler", "pyautogui fehlt! Installiere es mit:\npip install pyautogui")
+            return
+
+        selected_idx = self.listbox.curselection()
+        if not selected_idx:
+            messagebox.showinfo("Hinweis", "Bitte erst ein Programm auswählen.")
+            return
+
+        index = selected_idx[0]
+        messagebox.showinfo("Info", "Du hast 5 Sekunden Zeit, an die gewünschte Klickposition zu gehen.")
+        self.root.update()
+        time.sleep(5)
+        x, y = pyautogui.position()
+        self.programs[index]["clicks"].append([x, y])
+        messagebox.showinfo("Gespeichert", f"Klickposition {x}, {y} gespeichert.")
+
+    def start_all_programs(self, index=0):
+        if index >= len(self.programs):
+            return
+        try:
+            delay = float(self.delay_entry.get())
+            if delay < 0:
+                raise ValueError
+        except ValueError:
+            messagebox.showerror("Fehler", "Gültige positive Zahl für Verzögerung eingeben.")
+            return
+
+        prog = self.programs[index]
+        if Path(prog["path"]).exists():
+            subprocess.Popen(prog["path"])
+            time.sleep(2)
+            if pyautogui:
+                for pos in prog["clicks"]:
+                    pyautogui.click(pos[0], pos[1])
+                    time.sleep(0.5)
+        else:
+            print(f"Pfad nicht gefunden: {prog['path']}")
+
+        self.root.after(int(delay * 1000), lambda: self.start_all_programs(index + 1))
+
+    def save_programs(self):
+        try:
+            filepath = get_programs_file()
+            with filepath.open("w", encoding="utf-8") as f:
+                json.dump(self.programs, f, indent=2)
+            messagebox.showinfo("Erfolg", f"Programme gespeichert unter:\n{filepath}")
+        except Exception as e:
+            messagebox.showerror("Fehler", f"Fehler beim Speichern:\n{e}")
+
+    def load_programs(self):
+        filepath = get_programs_file()
+        if filepath.exists():
+            try:
+                with filepath.open("r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    for entry in data:
+                        if "path" in entry and "clicks" in entry:
+                            self.programs.append(entry)
+                            self.listbox.insert(tk.END, entry["path"])
+            except Exception as e:
+                messagebox.showerror("Fehler beim Laden", f"Programme konnten nicht geladen werden:\n{e}")
+
+if __name__ == "__main__":
+    root = tk.Tk()
+    root.resizable(False, False)
+    root.attributes("-topmost", False)
+    app = AppLauncherUI(root)
+    root.mainloop()
